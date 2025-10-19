@@ -3,26 +3,31 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
+	"math/rand"
 	"net/rpc"
 	"os"
-
-	//	"bufio"
-	//	"os"
-	//	"uk.ac.bris.cs/distributed2/secretstrings/stubs"
-	"fmt"
+	"time"
 
 	"uk.ac.bris.cs/distributed2/secretstrings/stubs"
 )
 
 func main() {
-	server := flag.String("server", "127.0.0.1:8030", "IP:port string to connect to as server")
 	filePath := flag.String("file", "../wordlist", "Path to file containing words")
 	flag.Parse()
-	fmt.Println("Server: ", *server)
-	//TODO: connect to the RPC server and send the request(s)
-	client, _ := rpc.Dial("tcp", *server)
-	defer client.Close()
+
+	clients := []*rpc.Client{}
+	for i := 8030; true; i++ {
+		addr := fmt.Sprintf("127.0.0.1:%d", i)
+		client, err := rpc.Dial("tcp", addr)
+		if err != nil {
+			break
+		}
+		fmt.Println("connected to server: %s", addr)
+		defer client.Close()
+		clients = append(clients, client)
+	}
 
 	file, err := os.Open(*filePath)
 	if err != nil {
@@ -30,7 +35,10 @@ func main() {
 	}
 	defer file.Close()
 
+	rand.Seed(time.Now().UnixNano())
+
 	scanner := bufio.NewScanner(file)
+	i := 0
 	for scanner.Scan() {
 		word := scanner.Text()
 
@@ -40,6 +48,10 @@ func main() {
 
 		request := stubs.Request{Message: word}
 		response := new(stubs.Response)
+
+		client := clients[i%len(clients)]
+		i++
+
 		client.Call(stubs.PremiumReverseHandler, request, response)
 		fmt.Println(response.Message)
 	}
